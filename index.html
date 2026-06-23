@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<title>RSS Stable V48.2</title>
+
+
+<link rel="apple-touch-icon" href="./icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+
+
+<style>
+/* ====== 基本 ====== */
+body{
+  margin:0;
+  font-family:-apple-system;
+  background:#121212;
+  color:#e0e0e0;
+  touch-action:manipulation;
+}
+
+/* ====== ヘッダー ====== */
+header{
+  position:fixed;
+  top:0;
+  left:0;
+  right:0;
+  z-index:9999;
+  background:#1e1e1e;
+  padding:6px 8px;
+  display:flex;
+  gap:6px;
+  align-items:center;
+  height:48px;
+  box-sizing:border-box;
+}
+
+#feedSelect{
+  flex:1;
+  padding:6px;
+  background:#2a2a2a;
+  color:#fff;
+  border:none;
+  border-radius:6px;
+  font-size:14px;
+}
+
+/* 正方形ボタン */
+#unreadBtn,
+#manageBtn{
+  width:36px;
+  height:36px;
+  padding:0;
+  border:none;
+  border-radius:8px;
+  background:#2a2a2a;
+  color:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+/* 未読ボタンは「未」 */
+#unreadBtn{
+  font-size:18px;
+}
+
+/* 三本線を大きくする */
+#manageBtn{
+  font-size:24px;
+}
+
+#unreadBtn.active{
+  background:#1976d2;
+}
+
+/* ====== プル更新 ====== */
+#loading{
+  position:fixed;
+  top:48px;
+  left:0;
+  right:0;
+  text-align:center;
+  height:0;
+  overflow:hidden;
+  background:#1e1e1e;
+  color:#aaa;
+  transition:0.2s;
+  line-height:40px;
+}
+
+/* ====== 一覧 ====== */
+#list{
+  margin-top:48px;
+  padding:8px 10px;
+}
+.item{
+  background:#1e1e1e;
+  margin:8px 0;
+  padding:12px;
+  border-radius:10px;
+}
+.item.read{
+  opacity:0.4;
+}
+
+/* ====== viewer ====== */
+#viewer{
+  position:fixed;
+  inset:0;
+  background:#121212;
+  display:none;
+  z-index:10000;
+  overflow-y:auto;
+}
+#content{
+  padding:12px;
+  padding-bottom:120px;
+}
+img{
+  max-width:100%;
+  max-height:50vh;
+  object-fit:contain;
+  border-radius:8px;
+  display:block;
+  margin:10px auto;
+  cursor:zoom-in;
+}
+#bottomBar{
+  position:fixed;
+  bottom:0;
+  left:0;
+  right:0;
+  height:100px;
+  background:#1e1e1e;
+  display:flex;
+}
+.btn{
+  flex:1;
+  margin:6px;
+  font-size:18px;
+  background:#2a2a2a;
+  color:#fff;
+  border:none;
+  border-radius:12px;
+}
+
+/* ====== 管理メニュー ====== */
+#manager{
+  position:fixed;
+  top:0;
+  left:0;
+  right:0;
+  bottom:0;
+  background:#121212;
+  display:none;
+  z-index:10002;
+  padding:10px;
+  overflow-y:auto;
+  padding-bottom:200px; /* ← キーボード対策 */
+}
+
+#managerClose{
+  position:absolute;
+  top:8px;
+  right:8px;
+  width:32px;
+  height:32px;
+  border:none;
+  border-radius:8px;
+  background:#2a2a2a;
+  color:#fff;
+  font-size:18px;
+}
+
+.manager-section{
+  margin-bottom:16px;
+}
+.manager-section h4{
+  margin:0 0 6px;
+}
+
+.rssItem{
+  background:#1e1e1e;
+  padding:6px 8px;
+  margin:4px 0;
+  border-radius:8px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+/* ====== 除外ワード・強調ワード ====== */
+#excludeList,
+#highlightList{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:6px;
+}
+
+.excludeItem{
+  background:#1e1e1e;
+  padding:6px;
+  border-radius:6px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+/* 入力欄の下に余白追加 */
+#excludeInput,
+#rssInput,
+#highlightInput{
+  width:100%;
+  padding:8px;
+  border:none;
+  border-radius:6px;
+  background:#2a2a2a;
+  color:#fff;
+  box-sizing:border-box;
+  margin-bottom:6px;
+}
+
+/* 強調表示 */
+.highlight{
+  background:#ffeb3b;
+  color:#000;
+  font-weight:bold;
+  padding:2px 4px;
+  border-radius:4px;
+}
+
+/* 本文中のリンク色 */
+#content a{
+  color:#4da3ff !important;
+  text-decoration:underline;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <select id="feedSelect" onchange="onFeedChange()">
+    <option value="all">全てのサイト</option>
+  </select>
+  <button id="unreadBtn" onclick="toggleUnread()">未</button>
+  <button id="manageBtn" onclick="toggleManager()">≡</button>
+</header>
+
+<div id="loading">更新</div>
+<div id="list"></div>
+
+<div id="viewer">
+  <div id="content"></div>
+  <div id="bottomBar"></div>
+</div>
+
+<div id="manager">
+  <button id="managerClose" onclick="toggleManager()">×</button>
+
+  <h3>管理メニュー</h3>
+
+  <div class="manager-section">
+    <h4>RSSを追加</h4>
+    <input id="rssInput" placeholder="RSS URL を入力"
+           onkeydown="if(event.key==='Enter'){addRSS()}">
+  </div>
+
+  <div class="manager-section">
+    <h4>登録済みRSS</h4>
+    <div id="rssList"></div>
+  </div>
+
+  <div class="manager-section">
+    <h4>除外ワード</h4>
+    <input id="excludeInput" placeholder="除外ワードを入力">
+    <div id="excludeList"></div>
+  </div>
+
+  <div class="manager-section">
+    <h4>強調ワード</h4>
+    <input id="highlightInput" placeholder="強調ワードを入力">
+    <div id="highlightList"></div>
+  </div>
+
+  <button onclick="resetRead()">既読情報を削除</button>
+</div>
+
+<script>
+let feeds=[];
+let itemsByFeed=[];
+let flatItems=[];
+let currentView=[];
+let currentViewIndex=0;
+let current=null;
+let readMap={};
+let excludeWords=[];
+let highlightWords=[];
+let currentFeedFilter="all";
+let unreadOnly=false;
+
+/* fetch with timeout */
+async function fetchWithTimeout(url, timeout=10000){
+  return Promise.race([
+    fetch(url),
+    new Promise((_,reject)=>setTimeout(()=>reject("timeout"),timeout))
+  ]);
+}
+
+/* HTMLエンティティをデコード（kojinabi対応） */
+function decodeHtmlEntities(str){
+  if(!str) return "";
+  const txt = document.createElement("textarea");
+  txt.innerHTML = str;
+  return txt.value;
+}
+
+/* content:encoded の HTML を安全に取得（V48.2 安定版） */
+function getNodeHTML(node){
+  const el =
+    node.querySelector("content") ||
+    node.querySelector("content\\:encoded") ||
+    node.getElementsByTagNameNS("*","encoded")[0];
+
+  if(!el) return "";
+
+  let html = el.textContent || "";
+  return decodeHtmlEntities(html);
+}
+
+/* 重複画像排除 */
+function extractImages(html){
+  if(!html) return [];
+  const decoded = decodeHtmlEntities(html);
+  const urls = [...decoded.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)]
+    .map(m => m[1]);
+  return [...new Set(urls)];
+}
+
+/* 本文から画像タグを削除 */
+function stripImages(html){
+  if(!html) return "";
+  const decoded = decodeHtmlEntities(html);
+  return decoded.replace(/<img[^>]*>/gi, "");
+}
+
+/* 記事画像抽出（最強版） */
+function getArticleImage(node){
+  let candidates = [];
+
+  const desc = node.querySelector("description")?.textContent || "";
+  candidates.push(...extractImages(desc));
+
+  const contentHtml = getNodeHTML(node);
+  candidates.push(...extractImages(contentHtml));
+
+  const media = node.querySelector("media\\:content")?.getAttribute("url");
+  if(media) candidates.push(media);
+
+  const enc = node.querySelector("enclosure")?.getAttribute("url");
+  if(enc) candidates.push(enc);
+
+  const unique = [...new Set(candidates)];
+  return unique.length > 0 ? unique[0] : "";
+}
+
+/* 強調適用 */
+function applyHighlight(text){
+  if(!text) return "";
+  let result = text;
+  highlightWords.forEach(w=>{
+    if(!w) return;
+    const re = new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"), "gi");
+    result = result.replace(re, `<span class="highlight">$&</span>`);
+  });
+  return result;
+}
+
+/* RSS追加（タイトルは登録時のみ取得） */
+async function addRSS(){
+  const rssUrl = document.getElementById("rssInput").value.trim();
+  if(!rssUrl) return;
+  if(!rssUrl.startsWith("http")) return;
+  if(feeds.some(f => f.url === rssUrl)) return;
+
+  let blogName = rssUrl;
+  try{
+    const proxy = "https://corsproxy.io/?" + encodeURIComponent(rssUrl);
+    const xmlText = await fetch(proxy).then(r=>r.text());
+    const xml = new DOMParser().parseFromString(xmlText,"text/xml");
+    const titleNode = xml.querySelector("channel > title, feed > title");
+    if(titleNode) blogName = titleNode.textContent.trim();
+  }catch(e){}
+
+  feeds.push({
+    url: rssUrl,
+    name: blogName,
+    lastNameFetchedAt: 0
+  });
+
+  localStorage.setItem("feeds", JSON.stringify(feeds));
+
+  document.getElementById("rssInput").value = "";
+
+  buildFeedSelect();
+  renderManager();
+  load();
+}
+
+/* RSS名編集（✏️） */
+function editFeedName(i){
+  const f = feeds[i];
+  const current = f.name || f.url;
+  const name = prompt("ブログ名を編集", current);
+  if(name === null) return;
+  const trimmed = name.trim();
+  if(!trimmed) return;
+
+  feeds[i].name = trimmed;
+  localStorage.setItem("feeds", JSON.stringify(feeds));
+
+  buildFeedSelect();
+  renderManager();
+}
+
+/* ページングURL生成（V46） */
+function buildPagedUrls(baseUrl){
+  const urls = [baseUrl];
+
+  if(baseUrl.includes("blogspot.")){
+    urls.push(baseUrl + "?start-index=11&max-results=10");
+    urls.push(baseUrl + "?start-index=21&max-results=10");
+    return urls;
+  }
+
+  if(baseUrl.includes("hatenablog")){
+    urls.push(baseUrl + "?page=2");
+    urls.push(baseUrl + "?page=3");
+    return urls;
+  }
+
+  if(baseUrl.includes("livedoor.jp")){
+    urls.push(baseUrl + "?page=2");
+    urls.push(baseUrl + "?page=3");
+    return urls;
+  }
+
+  if(baseUrl.includes("/feed") || baseUrl.includes("/rss") || baseUrl.includes("/atom")){
+    urls.push(baseUrl + "?paged=2");
+    urls.push(baseUrl + "?paged=3");
+    return urls;
+  }
+
+  return urls;
+}
+/* RSS解析（V48.2） */
+function parseRSS(text, fi){
+  const xml = new DOMParser().parseFromString(text,"text/xml");
+  const root = xml.documentElement.tagName.toLowerCase();
+
+  if(root==="rss"){
+    const items = xml.getElementsByTagName("item");
+    for(const node of items){
+      const rawDesc = getNodeHTML(node)
+                   || node.querySelector("description")?.textContent
+                   || "";
+      const desc    = stripImages(rawDesc);
+      const link    = node.querySelector("link")?.textContent || "";
+      const title   = node.querySelector("title")?.textContent || "";
+      const img     = getArticleImage(node);
+
+      let pubMs = 0;
+      const pub = node.querySelector("pubDate")?.textContent;
+      if(pub){
+        const t = Date.parse(pub);
+        if(!isNaN(t)) pubMs = t;
+      }
+
+      itemsByFeed[fi].push({title,desc,link,image:img,pubDate:pubMs});
+    }
+  }
+  else if(root==="feed"){
+    const entries = xml.getElementsByTagName("entry");
+    for(const node of entries){
+      const title = node.getElementsByTagName("title")[0]?.textContent || "";
+
+      const rawDesc = getNodeHTML(node)
+                   || node.getElementsByTagName("summary")[0]?.textContent
+                   || "";
+
+      const desc = stripImages(rawDesc);
+
+      const linkNode = [...node.getElementsByTagName("link")]
+        .find(l=>l.getAttribute("rel")==="alternate")
+        || node.getElementsByTagName("link")[0];
+      const link = linkNode?.getAttribute("href") || "";
+
+      const img = getArticleImage(node);
+
+      let pubMs = 0;
+      const upd = node.getElementsByTagName("updated")[0]?.textContent ||
+                  node.getElementsByTagName("published")[0]?.textContent;
+      if(upd){
+        const t = Date.parse(upd);
+        if(!isNaN(t)) pubMs = t;
+      }
+
+      itemsByFeed[fi].push({title,desc,link,image:img,pubDate:pubMs});
+    }
+  }
+  else if(root.includes("rdf")){
+    const items = xml.getElementsByTagName("item");
+    for(const node of items){
+      const rawDesc = getNodeHTML(node)
+                   || node.getElementsByTagName("description")[0]?.textContent
+                   || "";
+      const desc    = stripImages(rawDesc);
+      const title   = node.getElementsByTagName("title")[0]?.textContent || "";
+      const link    = node.getElementsByTagName("link")[0]?.textContent || "";
+      const img     = getArticleImage(node);
+
+      itemsByFeed[fi].push({title,desc,link,image:img,pubDate:0});
+    }
+  }
+}
+
+/* RSS読み込み（過去ページ対応） */
+async function load(){
+  itemsByFeed = feeds.map(()=>[]);
+  flatItems = [];
+  currentView = [];
+
+  for(let fi=0; fi<feeds.length; fi++){
+    const f = feeds[fi];
+    const pageUrls = buildPagedUrls(f.url);
+
+    for(const pageUrl of pageUrls){
+      try{
+        const proxy = "https://corsproxy.io/?" + encodeURIComponent(pageUrl);
+        const res = await fetchWithTimeout(proxy,10000);
+        const text = await res.text();
+        parseRSS(text, fi);
+      }catch(e){
+        console.log("ページ取得失敗:", pageUrl, e);
+      }
+    }
+  }
+
+  for(let fi=0; fi<itemsByFeed.length; fi++){
+    itemsByFeed[fi].sort((a,b)=>(b.pubDate||0)-(a.pubDate||0));
+  }
+
+  flatItems=[];
+  for(let fi=0; fi<itemsByFeed.length; fi++){
+    const arr = itemsByFeed[fi];
+    for(let idx=0; idx<arr.length; idx++){
+      flatItems.push({feedIndex:fi,indexInFeed:idx,item:arr[idx]});
+    }
+  }
+  flatItems.sort((a,b)=>(b.item.pubDate||0)-(a.item.pubDate||0));
+
+  render();
+}
+
+/* 除外ワード判定 */
+function isExcluded(item){
+  const t = (item.title||"").toLowerCase();
+  const d = (item.desc||"").toLowerCase();
+  return excludeWords.some(w=>{
+    const s = w.toLowerCase().trim();
+    return s && (t.includes(s) || d.includes(s));
+  });
+}
+
+/* 一覧描画 */
+function render(){
+  const list = document.getElementById("list");
+  list.innerHTML="";
+  currentView=[];
+
+  let source=[];
+  if(currentFeedFilter==="all"){
+    source=flatItems;
+  }else{
+    const fi = Number(currentFeedFilter);
+    const arr = itemsByFeed[fi] || [];
+    source = arr.map((it,idx)=>({feedIndex:fi,indexInFeed:idx,item:it}));
+  }
+
+  source.forEach(ref=>{
+    const it = ref.item;
+    if(isExcluded(it)) return;
+
+    const key = it.link || (it.title + "|" + it.desc.slice(0,30));
+    const isRead = !!readMap[key];
+    if(unreadOnly && isRead) return;
+
+    const viewIndex = currentView.length;
+    currentView.push(ref);
+
+    const div = document.createElement("div");
+    div.className="item";
+    if(isRead) div.classList.add("read");
+    div.innerHTML = applyHighlight(it.title || "(無題)");
+    div.onclick = ()=>openItem(viewIndex);
+    list.appendChild(div);
+  });
+}
+
+/* 記事を開く */
+function openItem(viewIndex){
+  if(viewIndex<0 || viewIndex>=currentView.length) return;
+  currentViewIndex=viewIndex;
+  const ref = currentView[viewIndex];
+  current = itemsByFeed[ref.feedIndex][ref.indexInFeed];
+
+  const key = current.link || (current.title + "|" + current.desc.slice(0,30));
+  readMap[key]=true;
+  localStorage.setItem("readMap",JSON.stringify(readMap));
+
+  render();
+
+  document.getElementById("viewer").style.display="block";
+  renderViewer();
+}
+
+/* プレビュー */
+function renderViewer(){
+  const imgHtml = current.image
+    ? `<img src="${current.image}">`
+    : "";
+
+  document.getElementById("content").innerHTML = `
+    <h3>${applyHighlight(current.title)}</h3>
+    ${imgHtml}
+    <div>${applyHighlight(current.desc)}</div>
+    <button class="btn" onclick="showFull()" style="margin-top:10px;">
+      全文表示
+    </button>
+  `;
+
+  document.getElementById("bottomBar").innerHTML = `
+    <button class="btn" onclick="closeViewer()">戻る</button>
+    <button class="btn" onclick="prevItem()">▲</button>
+    <button class="btn" onclick="nextItem()">▼</button>
+  `;
+}
+
+/* 全文表示 */
+function showFull(){
+  if(!current.link){
+    alert("リンクがありません");
+    return;
+  }
+  const safe = current.link.replace(/"/g,"&quot;");
+  document.getElementById("content").innerHTML = `
+    <iframe src="${safe}" style="width:100%;height:80vh;border:none;"></iframe>
+  `;
+  document.getElementById("bottomBar").innerHTML = `
+    <button class="btn" onclick="renderViewer()">戻る</button>
+    <button class="btn" onclick="prevItem()">▲</button>
+    <button class="btn" onclick="nextItem()">▼</button>
+  `;
+}
+
+/* 上下移動 */
+function prevItem(){
+  if(currentViewIndex>0) openItem(currentViewIndex-1);
+}
+function nextItem(){
+  if(currentViewIndex<currentView.length-1) openItem(currentViewIndex+1);
+}
+
+/* viewer閉じる */
+function closeViewer(){
+  document.getElementById("viewer").style.display="none";
+}
+
+/* 管理メニュー（裏スクロール禁止） */
+function toggleManager(){
+  const m=document.getElementById("manager");
+  const isOpen = m.style.display==="block";
+
+  if(!isOpen){
+    renderManager();
+    renderExcludeList();
+    renderHighlightList();
+    document.body.style.overflow = "hidden";  // ← 裏スクロール禁止
+  }else{
+    document.body.style.overflow = "";        // ← 元に戻す
+  }
+
+  m.style.display = isOpen ? "none" : "block";
+}
+
+/* 管理メニュー描画 */
+function renderManager(){
+  const wrap=document.getElementById("rssList");
+  wrap.innerHTML="";
+  feeds.forEach((f,i)=>{
+    const div=document.createElement("div");
+    div.className="rssItem";
+    div.innerHTML=`
+      <span>${f.name || f.url}</span>
+      <span>
+        <button onclick="editFeedName(${i})">✏️</button>
+        <button onclick="removeFeed(${i})">削除</button>
+      </span>
+    `;
+    wrap.appendChild(div);
+  });
+}
+
+function removeFeed(i){
+  feeds.splice(i,1);
+  localStorage.setItem("feeds",JSON.stringify(feeds));
+  if(String(i)===currentFeedFilter) currentFeedFilter="all";
+  buildFeedSelect();
+  renderManager();
+  load();
+}
+
+/* 除外ワード */
+function addExcludeWord(){
+  const v=document.getElementById("excludeInput").value.trim();
+  if(!v) return;
+  if(excludeWords.includes(v)) return;
+
+  excludeWords.push(v);
+  localStorage.setItem("excludeWords",JSON.stringify(excludeWords));
+  document.getElementById("excludeInput").value="";
+  renderExcludeList();
+  render();
+}
+
+function removeExcludeWord(idx){
+  excludeWords.splice(idx,1);
+  localStorage.setItem("excludeWords",JSON.stringify(excludeWords));
+  renderExcludeList();
+  render();
+}
+
+function renderExcludeList(){
+  const wrap=document.getElementById("excludeList");
+  wrap.innerHTML="";
+  excludeWords.forEach((w,i)=>{
+    const div=document.createElement("div");
+    div.className="excludeItem";
+    div.innerHTML=`
+      <span>${w}</span>
+      <button onclick="removeExcludeWord(${i})">削除</button>
+    `;
+    wrap.appendChild(div);
+  });
+}
+
+/* 強調ワード */
+function addHighlightWord(){
+  const v=document.getElementById("highlightInput").value.trim();
+  if(!v) return;
+  if(highlightWords.includes(v)) return;
+
+  highlightWords.push(v);
+  localStorage.setItem("highlightWords",JSON.stringify(highlightWords));
+  document.getElementById("highlightInput").value="";
+  renderHighlightList();
+  render();
+}
+
+function removeHighlightWord(idx){
+  highlightWords.splice(idx,1);
+  localStorage.setItem("highlightWords",JSON.stringify(highlightWords));
+  renderHighlightList();
+  render();
+}
+
+function renderHighlightList(){
+  const wrap=document.getElementById("highlightList");
+  wrap.innerHTML="";
+  highlightWords.forEach((w,i)=>{
+    const div=document.createElement("div");
+    div.className="excludeItem";
+    div.innerHTML=`
+      <span>${w}</span>
+      <button onclick="removeHighlightWord(${i})">削除</button>
+    `;
+    wrap.appendChild(div);
+  });
+}
+
+/* 既読情報削除 */
+function resetRead(){
+  readMap={};
+  localStorage.setItem("readMap",JSON.stringify(readMap));
+  render();
+}
+
+/* 未読ボタン */
+function toggleUnread(){
+  unreadOnly=!unreadOnly;
+  const btn=document.getElementById("unreadBtn");
+  if(unreadOnly) btn.classList.add("active");
+  else btn.classList.remove("active");
+  render();
+}
+
+/* フィード切り替え */
+function onFeedChange(){
+  currentFeedFilter=document.getElementById("feedSelect").value;
+  render();
+}
+
+/* フィード選択肢 */
+function buildFeedSelect(){
+  const sel=document.getElementById("feedSelect");
+  sel.innerHTML=`<option value="all">全てのサイト</option>`;
+  feeds.forEach((f,idx)=>{
+    const opt=document.createElement("option");
+    opt.value=String(idx);
+    opt.textContent=f.name || f.url;
+    sel.appendChild(opt);
+  });
+
+  if(currentFeedFilter!=="all" && !feeds[Number(currentFeedFilter)]){
+    currentFeedFilter="all";
+  }
+  sel.value=currentFeedFilter;
+}
+
+/* 画像タップで拡大 */
+document.addEventListener("click",e=>{
+  if(e.target.tagName==="IMG"){
+    const src=e.target.src;
+    const w=window.open("","_blank");
+    if(w){
+      w.document.write(`<img src="${src}" style="width:100%;height:auto;">`);
+    }
+  }
+});
+
+/* プル更新（誤作動防止版） */
+let startY=0;
+let pulling=false;
+let refreshReady=false;
+
+function showLoading(on,text){
+  const el=document.getElementById("loading");
+  if(text) el.textContent=text;
+  el.style.height = on ? "40px" : "0";
+}
+
+document.addEventListener("touchstart",e=>{
+  if(document.getElementById("viewer").style.display==="block") return;
+  if(document.getElementById("manager").style.display==="block") return;
+
+  if(window.scrollY > 0){
+    pulling = false;
+    refreshReady = false;
+    return;
+  }
+
+  startY=e.touches[0].clientY;
+  pulling=true;
+  refreshReady=false;
+});
+
+document.addEventListener("touchmove",e=>{
+  if(!pulling) return;
+  const dy=e.touches[0].clientY-startY;
+
+  if(dy>20 && dy<=60){
+    showLoading(true,"引っ張って更新");
+  }else if(dy>60){
+    showLoading(true,"更新");
+    refreshReady=true;
+  }
+});
+
+document.addEventListener("touchend",e=>{
+  if(!pulling) return;
+  pulling=false;
+
+  if(refreshReady){
+    showLoading(true,"更新中…");
+    load().then(()=>{
+      showLoading(true,"更新完了");
+      setTimeout(()=>showLoading(false),500);
+    });
+  }else{
+    showLoading(false);
+  }
+});
+
+/* 入力欄フォーカス時にスクロール（改良版） */
+function ensureVisible(el){
+  setTimeout(()=>{
+    el.scrollIntoView({
+      behavior:"smooth",
+      block:"center",
+      inline:"nearest"
+    });
+  }, 50);
+}
+
+document.getElementById("excludeInput").addEventListener("focus", e=>{
+  ensureVisible(e.target);
+});
+document.getElementById("highlightInput").addEventListener("focus", e=>{
+  ensureVisible(e.target);
+});
+
+/* Enterで除外・強調ワード追加 */
+document.addEventListener("DOMContentLoaded",()=>{
+  const ex=document.getElementById("excludeInput");
+  ex.addEventListener("keydown",e=>{
+    if(e.key==="Enter"){
+      e.preventDefault();
+      addExcludeWord();
+    }
+  });
+
+  const hi=document.getElementById("highlightInput");
+  hi.addEventListener("keydown",e=>{
+    if(e.key==="Enter"){
+      e.preventDefault();
+      addHighlightWord();
+    }
+  });
+});
+
+/* 起動 */
+window.onload=()=>{
+
+
+
+  const password = localStorage.getItem("rss_password");
+  if (password !== "0000") { // ←ここにあなたの決めたパスワードを入れてください
+    const input = prompt("パスワードを入力してください：");
+    if (input === "0000") {  // ←ここにも同じパスワード
+      localStorage.setItem("rss_password", input);
+    } else {
+      alert("パスワードが違います。");
+      document.body.innerHTML = "<h1 style='color:red;padding:20px;'>認証エラー</h1>";
+      return; // 起動をストップ
+    }
+  }
+
+
+
+  try{
+    feeds = JSON.parse(localStorage.getItem("feeds")) || [];
+  }catch(e){ feeds=[]; }
+
+  try{
+    readMap = JSON.parse(localStorage.getItem("readMap")) || {};
+  }catch(e){ readMap={}; }
+
+  try{
+    excludeWords = JSON.parse(localStorage.getItem("excludeWords")) || [];
+  }catch(e){ excludeWords=[]; }
+
+  try{
+    highlightWords = JSON.parse(localStorage.getItem("highlightWords")) || [];
+  }catch(e){ highlightWords=[]; }
+
+  if(feeds.length===0){
+    feeds=[{
+      url:"https://gekiyasu-gekiyasu.doorblog.jp/atom.xml",
+      name:"激安特価ブログ",
+      lastNameFetchedAt:0
+    }];
+  }
+
+  buildFeedSelect();
+  load();
+};
+</script>
+
+</body>
+</html>
